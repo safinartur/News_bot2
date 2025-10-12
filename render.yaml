@@ -1,0 +1,52 @@
+services:
+  # ---------- Backend (Django) ----------
+  - type: web
+    name: news-backend
+    env: python
+    buildCommand: |
+      cd backend
+      pip install -r requirements.txt
+      python manage.py migrate
+    startCommand: cd backend && gunicorn newsportal.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: newsportal.settings
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SECRET_KEY
+        sync: false
+      - key: API_SHARED_KEY
+        sync: false
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*"
+
+  # ---------- Frontend (React / Vite build → static hosting) ----------
+  - type: web
+    name: news-frontend
+    env: static
+    buildCommand: |
+      cd frontend
+      npm install
+      npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+
+  # ---------- Telegram Bot ----------
+  - type: worker
+    name: news-bot
+    env: python
+    buildCommand: cd bot && pip install -r requirements.txt
+    startCommand: cd bot && python bot.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: BACKEND_API_BASE
+        value: https://news-backend.onrender.com/api
+      - key: API_SHARED_KEY
+        sync: false
+      - key: MODERATOR_IDS
+        value: 123456789
