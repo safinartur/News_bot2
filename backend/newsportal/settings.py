@@ -148,8 +148,11 @@ SPECTACULAR_SETTINGS = {
 
 # Database
 DATABASES = {
-    "default": dj_database_url.parse(os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / "db.sqlite3"}"))
+    "default": dj_database_url.parse(
+        os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
+    )
 }
+
 
 # CORS / CSRF
 CORS_ALLOW_ALL_ORIGINS = False
