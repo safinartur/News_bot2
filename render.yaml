@@ -5,14 +5,15 @@ services:
     env: python
     buildCommand: |
       cd backend
-      pip install -r requirements.txt
+      pip install --upgrade pip
+      pip install --no-cache-dir -r requirements.txt
       python manage.py migrate
     startCommand: cd backend && gunicorn newsportal.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: newsportal.settings
       - key: PYTHON_VERSION
-        value: 3.11.9
+        value: 3.12.6            # ✅ стабильная версия
       - key: SECRET_KEY
         sync: false
       - key: API_SHARED_KEY
@@ -22,7 +23,7 @@ services:
       - key: ALLOWED_HOSTS
         value: "*"
 
-  # ---------- Frontend (React / Vite build → static hosting) ----------
+  # ---------- Frontend (React / Vite → static hosting) ----------
   - type: web
     name: news-frontend
     env: static
@@ -35,14 +36,23 @@ services:
       - key: NODE_VERSION
         value: 20
 
-  # ---------- Telegram Bot ----------
+  # ---------- Telegram Bot (Webhook mode) ----------
   - type: worker
     name: news-bot
     env: python
-    buildCommand: cd bot && pip install -r requirements.txt
-    startCommand: cd bot && python bot.py
+    buildCommand: |
+      cd bot
+      pip install --upgrade pip
+      pip install --no-cache-dir -r requirements.txt
+    startCommand: |
+      cd bot
+      python bot.py
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.6            # ✅ исправлено с 3.13 → 3.12.6
       - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: BOT_WEBHOOK_URL     # 👈 обязательно добавь публичный Render URL бота, например https://news-bot.onrender.com
         sync: false
       - key: BACKEND_API_BASE
         value: https://news-backend.onrender.com/api
@@ -50,3 +60,5 @@ services:
         sync: false
       - key: MODERATOR_IDS
         value: 123456789
+      - key: PORT
+        value: 10000             # ✅ стандартный порт для webhook
