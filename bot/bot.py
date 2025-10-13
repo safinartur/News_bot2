@@ -18,6 +18,9 @@ from telegram.ext import (
     ContextTypes,
 )
 
+import telegram
+print(f"📦 python-telegram-bot version: {telegram.__version__}")
+
 # --- Этапы диалога ---
 TITLE, BODY, IMAGE, CONFIRM = range(4)
 
