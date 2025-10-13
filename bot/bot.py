@@ -6,6 +6,7 @@ from urllib3.util.retry import Retry
 from dotenv import load_dotenv
 from typing import Optional
 import hashlib
+import asyncio
 
 from telegram import Update
 from telegram.ext import (
@@ -26,10 +27,10 @@ load_dotenv()
 API_BASE = os.getenv("BACKEND_API_BASE", "http://127.0.0.1:8000/api")
 API_KEY = os.getenv("API_SHARED_KEY")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-MOD_IDS = set([int(x) for x in os.getenv("MODERATOR_IDS", "").split(",") if x.strip().isdigit()])
+MOD_IDS = {int(x) for x in os.getenv("MODERATOR_IDS", "").split(",") if x.strip().isdigit()}
 DEFAULT_TAGS = [t.strip() for t in os.getenv("DEFAULT_TAGS", "").split(",") if t.strip()]
-WEBHOOK_URL = os.getenv("BOT_WEBHOOK_URL")  # например: https://news-bot.onrender.com/webhook
-PORT = int(os.getenv("PORT", "8443"))
+WEBHOOK_URL = os.getenv("BOT_WEBHOOK_URL")
+PORT = int(os.getenv("PORT", "10000"))
 
 # --- Requests с retry ---
 retry_strategy = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
@@ -97,16 +98,12 @@ async def preview(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def publish(update: Update, context: ContextTypes.DEFAULT_TYPE, photo_file: Optional[str]):
     print("📤 Публикация новости...")
     try:
-        # Проверяем backend
         ping_url = f"{API_BASE}/posts/?page=1"
         ping_resp = requests.get(ping_url, timeout=10)
         if not ping_resp.ok:
-            await update.message.reply_text(
-                f"⚠️ Backend ответил ошибкой ({ping_resp.status_code}). Попробуй позже."
-            )
+            await update.message.reply_text(f"⚠️ Backend ответил ошибкой ({ping_resp.status_code}).")
             return
 
-        # Отправляем POST
         data = {
             "title": context.user_data.get("title", "(без названия)"),
             "body": context.user_data.get("body", "(без текста)"),
@@ -115,7 +112,9 @@ async def publish(update: Update, context: ContextTypes.DEFAULT_TYPE, photo_file
         files = {"cover": open(photo_file, "rb")} if photo_file else None
         headers = {"X-API-KEY": API_KEY}
 
-        r = requests_session.post(f"{API_BASE}/posts/", data=data, files=files, headers=headers, timeout=(10, 30))
+        r = requests_session.post(
+            f"{API_BASE}/posts/", data=data, files=files, headers=headers, timeout=(10, 30)
+        )
         if files:
             files["cover"].close()
 
@@ -160,7 +159,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if r.ok:
             await update.message.reply_text("✅ Backend доступен.")
         else:
-            await update.message.reply_text(f"⚠️ Backend ответил ошибкой ({r.status_code}).")
+            await update.message.reply_text(f"⚠️ Backend ответил с ошибкой ({r.status_code}).")
     except Exception as e:
         await update.message.reply_text(f"🟥 Backend недоступен: {e}")
 
@@ -192,24 +191,34 @@ def build_app():
     return app
 
 
-# --- Основной запуск (Webhook) ---
-if __name__ == "__main__":
+# --- Основной запуск ---
+async def main():
     print("🌐 Пробую разбудить backend...")
     try:
         requests.get(f"{API_BASE}/posts/?page=1", timeout=10)
+        print("✅ Backend отвечает.")
     except Exception:
         print("⚠️ Backend пока недоступен")
 
-    print("🤖 Запуск Telegram-бота через Webhook...")
     app = build_app()
 
-    if not WEBHOOK_URL:
-        raise ValueError("❌ BOT_WEBHOOK_URL не задан в .env!")
+    if WEBHOOK_URL:
+        print("🤖 Запуск Telegram-бота через Webhook...")
+        await app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}", drop_pending_updates=True)
+        port = int(os.getenv("PORT", "10000"))
+        await app.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=TOKEN,
+            webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
+        )
+    else:
+        print("⚙️ BOT_WEBHOOK_URL не найден — запускаю polling")
+        await app.run_polling(drop_pending_updates=True)
 
-    print(f"🔗 Устанавливаю webhook: {WEBHOOK_URL}/{TOKEN}")
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=TOKEN,
-        webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
-    )
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        print("🛑 Бот остановлен вручную.")
