@@ -1,3 +1,5 @@
 python-dotenv>=1.0
 requests>=2.31
-python-telegram-bot==20.6
+python-telegram-bot[webhooks]==20.6
+aiohttp>=3.9.5
+urllib3>=2.2
